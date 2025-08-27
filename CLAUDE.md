@@ -66,9 +66,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Validates required env vars on startup with fail-fast behavior based on selected AI provider
 - Logs configuration including AI provider and document auto-import path
 
+### Slack App Configuration
+- **manifest.yaml** / **manifest-openai.yaml** - For OpenAI ChatGPT setup (includes /dalle command)
+- **manifest-claude.yaml** - For Claude AI setup (no image generation commands)
+- Choose the appropriate manifest when creating your Slack app based on your AI_PROVIDER setting
+
 ### Extension Points
 - **Message Handlers**: Add new `app.message()` patterns in the general handler
-- **Slash Commands**: Add new `app.command()` handlers (current: /dalle, /docs-search, /docs-reload, /help)
+- **Slash Commands**: Add new `app.command()` handlers 
+  - OpenAI: /dalle, /docs-search, /docs-reload, /help
+  - Claude: /docs-search, /docs-reload, /help
 - **AI Providers**: Add new provider classes implementing sendMessage(text, userId) interface
 - **Knowledge Base**: Modify DocumentKnowledgeBase class for different embedding models or vector stores
 - **Document Processing**: Extend LocalFileDocumentationProcessor class for new file formats or processing logic

@@ -21,7 +21,10 @@ sudo apt -y install redis-server
 - Go to https://api.slack.com/apps
 - Click **Create App**
 - Choose a workspace
-- Copy the manifest.yaml contents into the input box
+- **Choose the appropriate manifest file:**
+  - `manifest.yaml` or `manifest-openai.yaml` - If using OpenAI ChatGPT (includes /dalle command)
+  - `manifest-claude.yaml` - If using Claude AI (no image generation)
+- Copy the manifest contents into the input box
 - Update the name and display name settings
 - Click **Create**
 
