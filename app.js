@@ -17,6 +17,9 @@
 // posting directly to the channel when complete.
 ///////////////////////////////////////////////////////////////
 
+// Get AI provider from environment variable or use default
+const aiProvider = process.env.AI_PROVIDER || 'openai';
+
 // Get bot personality from environment variable or use default
 const defaultPersonality = `You are a Soong type Android named ${process.env.SLACK_BOT_USER_NAME}. You are a member of the crew of the USS Enterprise. You are a member of the science division. You respond to all inquiries in character as if you were Lieutenant Commander Data from Star Trek: The Next Generation.`;
 const personalityPrompt = process.env.BOT_PERSONALITY || defaultPersonality;
@@ -27,11 +30,21 @@ const thinkingMessage = process.env.THINKING_MESSAGE || defaultThinkingMessage;
 
 // Validate required environment variables early to fail fast
 function validateRequiredEnv() {
-  const required = ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN', 'SLACK_BOT_USER_NAME', 'OPENAI_API_KEY'];
+  const baseRequired = ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN', 'SLACK_BOT_USER_NAME'];
+  const aiProvider = process.env.AI_PROVIDER || 'openai';
+
+  // Add AI provider specific requirements
+  const aiRequired = aiProvider === 'claude' ? ['ANTHROPIC_API_KEY'] : ['OPENAI_API_KEY'];
+
+  const required = [...baseRequired, ...aiRequired];
   const missing = required.filter((k) => !process.env[k]);
+
   if (missing.length) {
-    console.error('Missing required environment variables:', missing.join(', '));
-    console.error('Please set them (see .env.example) and restart the process.');
+    console.error(
+      `Missing required environment variables for AI_PROVIDER='${aiProvider}':`,
+      missing.join(', ')
+    );
+    console.error('Please set them and restart the process.');
     process.exit(1);
   }
 }
@@ -42,6 +55,7 @@ import pkg from '@slack/bolt';
 const { App } = pkg;
 import { directMention } from '@slack/bolt';
 import { ChatGPTAPI } from 'chatgpt';
+import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import Keyv from 'keyv';
 import KeyvRedis from '@keyv/redis';
@@ -99,20 +113,93 @@ console.log(
   `Keyv/Redis configured: REDIS_URL=${redisUrl}, MEMORY_TTL_HOURS=${memoryTtlHours}, MEMORY_MAX_KEYS=${memoryMaxKeys}`
 );
 
-// Create a new instance of the ChatGPTAPI client
-const openai_api = new ChatGPTAPI({
-  apiKey: process.env.OPENAI_API_KEY,
-  messageStore,
-  systemMessage: personalityPrompt,
-  completionParams: {
-    model: 'gpt-4o',
-  },
-});
+// AI Provider abstraction classes
+class OpenAIProvider {
+  constructor(apiKey, systemMessage, messageStore) {
+    this.api = new ChatGPTAPI({
+      apiKey,
+      messageStore,
+      systemMessage,
+      completionParams: {
+        model: 'gpt-4o',
+      },
+    });
+    this.conversationMap = new Map(); // Maps userId to parentMessageId
+  }
 
-// OpenAI API client for generating images
-const openaiClient = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+  async sendMessage(text, userId) {
+    let response;
+    if (!this.conversationMap.has(userId)) {
+      response = await this.api.sendMessage(text);
+    } else {
+      const parentId = this.conversationMap.get(userId);
+      response = await this.api.sendMessage(text, { parentMessageId: parentId });
+    }
+    this.conversationMap.set(userId, response.id);
+    return response.text;
+  }
+}
+
+class ClaudeProvider {
+  constructor(apiKey, systemMessage, messageStore) {
+    this.api = new Anthropic({ apiKey });
+    this.systemMessage = systemMessage;
+    this.messageStore = messageStore;
+    this.conversationMap = new Map(); // Maps userId to conversation history
+  }
+
+  async sendMessage(text, userId) {
+    // Get or create conversation history for this user
+    let messages = this.conversationMap.get(userId) || [];
+
+    // Add the new user message
+    messages.push({ role: 'user', content: text });
+
+    // Keep conversation history manageable (last 10 exchanges = 20 messages)
+    if (messages.length > 20) {
+      messages = messages.slice(-20);
+    }
+
+    const response = await this.api.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1024,
+      system: this.systemMessage,
+      messages: messages,
+    });
+
+    const responseText = response.content[0].text;
+
+    // Add assistant's response to conversation history
+    messages.push({ role: 'assistant', content: responseText });
+    this.conversationMap.set(userId, messages);
+
+    // Also store in Redis for persistence (simplified key-value)
+    const conversationKey = `claude-conversation-${userId}`;
+    await this.messageStore.set(conversationKey, JSON.stringify(messages));
+
+    return responseText;
+  }
+}
+
+// Initialize the AI provider based on configuration
+let ai_api;
+if (aiProvider === 'claude') {
+  console.log('Initializing Claude AI provider...');
+  ai_api = new ClaudeProvider(process.env.ANTHROPIC_API_KEY, personalityPrompt, messageStore);
+} else {
+  console.log('Initializing OpenAI ChatGPT provider...');
+  ai_api = new OpenAIProvider(process.env.OPENAI_API_KEY, personalityPrompt, messageStore);
+}
+
+console.log(`AI Provider: ${aiProvider.toUpperCase()}`);
+
+// OpenAI API client for generating images (only initialize if using OpenAI or if API key is available)
+let openaiClient = null;
+if (process.env.OPENAI_API_KEY) {
+  openaiClient = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
 // Function to generate an image with DALL-E (model: gpt-image-1)
 async function generateImage(prompt) {
@@ -121,6 +208,12 @@ async function generateImage(prompt) {
 
     if (!prompt || prompt.trim() === '') {
       throw new Error('Empty prompt provided for image generation');
+    }
+
+    if (!openaiClient) {
+      throw new Error(
+        'OpenAI API client not initialized. OPENAI_API_KEY is required for image generation.'
+      );
     }
 
     console.log('Calling OpenAI API with parameters:', {
@@ -168,13 +261,9 @@ async function generateImage(prompt) {
   }
 }
 
-// Use this map to track the parent message ids for each user
-const userParentMessageIds = new Map();
-
-// Function to handle messages and map them to their parent ids
+// Function to handle messages using the configured AI provider
 // This is how the bot is able to remember previous conversations
 async function handleMessage(message, _client = null, _channel = null) {
-  let response;
   const userId = message.user;
 
   try {
@@ -193,26 +282,14 @@ async function handleMessage(message, _client = null, _channel = null) {
       return `I'd be happy to assist with image generation. Please use the /dalle slash command followed by your prompt. For example: \`/dalle a sunset over mountains\``;
     }
 
-    // Process the message with OpenAI
-    if (!userParentMessageIds.has(userId)) {
-      // send the first message without a parentMessageId
-      response = await openai_api.sendMessage(message.text);
-    } else {
-      // send a follow-up message with the stored parentMessageId
-      const parentId = userParentMessageIds.get(userId);
-      response = await openai_api.sendMessage(message.text, { parentMessageId: parentId });
-    }
-
-    // store the parent message id for this user
-    userParentMessageIds.set(userId, response.id);
-
-    //console.log(response.text);
-    return response.text;
+    // Process the message with the configured AI provider
+    const responseText = await ai_api.sendMessage(message.text, userId);
+    return responseText;
   } catch (error) {
     console.error('Error in handleMessage:', error);
 
-    // Check if it's an OpenAI API error
-    if (error.statusCode === 400 && error.message.includes('content')) {
+    // Check for common API errors
+    if (error.statusCode === 400 || (error.error && error.error.type === 'invalid_request_error')) {
       return 'I apologize, but I encountered an issue processing your message. Could you please rephrase your request?';
     }
 

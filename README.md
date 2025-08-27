@@ -4,7 +4,7 @@
 
 ## Overview
 
-This is a ChatGPT-powered Slack chatbot built on the Bolt JS framework. The bot includes canned responses and falls back to ChatGPT for messages that don't match a predefined pattern. You can customize the bot's personality and responses to suit your needs.
+This is an AI-powered Slack chatbot built on the Bolt JS framework. The bot supports both **OpenAI ChatGPT** (default) and **Anthropic Claude** as AI providers. The bot includes canned responses and falls back to your chosen AI provider for messages that don't match a predefined pattern. You can customize the bot's personality and responses to suit your needs.
 
 ## Prerequisites
 
@@ -37,7 +37,17 @@ Then scroll down in Basic Info and click **Generate Token and Scopes** with all 
 export SLACK_BOT_TOKEN=<your-bot-token> # from the OAuth section
 export SLACK_APP_TOKEN=<your-app-level-token> # from the Basic Info App Token Section
 export SLACK_BOT_USER_NAME=<your-bot-username> # must match the short name of your bot user
+
+# AI Provider Configuration (choose one)
+export AI_PROVIDER="openai" # Use "openai" for ChatGPT or "claude" for Claude
+
+# For OpenAI ChatGPT (default)
 export OPENAI_API_KEY=<your-openai-api-key> # get from here: https://platform.openai.com/account/api-keys
+
+# For Claude AI (alternative)
+export ANTHROPIC_API_KEY=<your-anthropic-api-key> # get from here: https://console.anthropic.com/
+
+# Optional customization
 export BOT_PERSONALITY="Your custom bot personality prompt here" # Optional: Set a custom personality for your bot
 export THINKING_MESSAGE=":gear: _Processing your request..._" # Optional: Customize the thinking indicator message
 ```
@@ -49,7 +59,17 @@ export THINKING_MESSAGE=":gear: _Processing your request..._" # Optional: Custom
 $env:SLACK_BOT_TOKEN = "xoxb-your-bot-token"
 $env:SLACK_APP_TOKEN = "xapp-your-app-token"
 $env:SLACK_BOT_USER_NAME = "Data" # Change to match your bot's name
+
+# AI Provider Configuration (choose one)
+$env:AI_PROVIDER = "openai" # Use "openai" for ChatGPT or "claude" for Claude
+
+# For OpenAI ChatGPT (default)
 $env:OPENAI_API_KEY = "your-openai-api-key"
+
+# For Claude AI (alternative)
+$env:ANTHROPIC_API_KEY = "your-anthropic-api-key"
+
+# Optional customization
 $env:BOT_PERSONALITY = "Your custom bot personality prompt here" # Optional: Set a custom personality for your bot
 $env:THINKING_MESSAGE = ":gear: _Processing your request..._" # Optional: Customize the thinking indicator message
 
@@ -132,7 +152,11 @@ When using the `/dalle` slash command:
 | SLACK_BOT_TOKEN     | Yes      | Your Slack bot token from OAuth section            |
 | SLACK_APP_TOKEN     | Yes      | Your Slack app-level token                         |
 | SLACK_BOT_USER_NAME | Yes      | Must match the short name of your bot user         |
-| OPENAI_API_KEY      | Yes      | Your OpenAI API key                                |
+| AI_PROVIDER         | No       | AI provider to use: "openai" (default) or "claude" |
+| OPENAI_API_KEY      | *        | Your OpenAI API key (required if AI_PROVIDER=openai) |
+| ANTHROPIC_API_KEY   | *        | Your Anthropic API key (required if AI_PROVIDER=claude) |
 | BOT_PERSONALITY     | No       | Custom personality prompt for your bot             |
 | THINKING_MESSAGE    | No       | Custom thinking indicator message                  |
 | REDIS_URL           | No       | Custom Redis URL (default: redis://localhost:6379) |
+
+**Note:** Either OPENAI_API_KEY or ANTHROPIC_API_KEY is required depending on your AI_PROVIDER setting.
