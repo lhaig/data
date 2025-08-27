@@ -13,6 +13,18 @@ features:
       description: Generate an image with DALL-E
       usage_hint: '<prompt>'
       should_escape: false
+    - command: /docs-search
+      description: Search documents in the knowledge base (debugging)
+      usage_hint: '<your question>'
+      should_escape: false
+    - command: /docs-reload
+      description: Reload documents from DOCS_PATH environment variable
+      usage_hint: ''
+      should_escape: false
+    - command: /help
+      description: Show all available commands and current configuration
+      usage_hint: ''
+      should_escape: false
 oauth_config:
   scopes:
     bot:

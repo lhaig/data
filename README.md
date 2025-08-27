@@ -4,7 +4,7 @@
 
 ## Overview
 
-This is an AI-powered Slack chatbot built on the Bolt JS framework. The bot supports both **OpenAI ChatGPT** (default) and **Anthropic Claude** as AI providers. The bot includes canned responses and falls back to your chosen AI provider for messages that don't match a predefined pattern. You can customize the bot's personality and responses to suit your needs.
+This is an AI-powered Slack chatbot built on the Bolt JS framework with **intelligent document knowledge capabilities**. The bot supports both **OpenAI ChatGPT** (default) and **Anthropic Claude** as AI providers, plus a **Redis-based document storage system** that can instantly ingest your local markdown documentation. The bot automatically enhances conversations with relevant context from your documentation, making it perfect for teams with extensive technical docs.
 
 ## Prerequisites
 
@@ -30,6 +30,14 @@ Then scroll down in Basic Info and click **Generate Token and Scopes** with all 
 
 ### 1. Setup environment variables
 
+**🎯 Primary Feature**: The bot automatically imports your local markdown documentation on startup and provides contextual assistance in all conversations.
+
+**Two Knowledge Base Modes:**
+- **OpenAI Mode**: Vector embeddings for semantic search (most accurate)
+- **Claude Mode**: Text analysis + AI ranking (no embeddings needed, Claude API only)
+
+**🚀 Automatic Document Import**: Set `DOCS_PATH` to your documentation directory and documents are automatically loaded on bot startup - no manual commands needed!
+
 #### For Linux/Mac
 
 ```zsh
@@ -46,6 +54,10 @@ export OPENAI_API_KEY=<your-openai-api-key> # get from here: https://platform.op
 
 # For Claude AI (alternative)
 export ANTHROPIC_API_KEY=<your-anthropic-api-key> # get from here: https://console.anthropic.com/
+
+# Document auto-import (RECOMMENDED)
+export DOCS_PATH="/path/to/your/docs" # Auto-import documents on startup
+export DOCS_MAX_FILES="500" # Optional: Limit number of files to import (default: 500)
 
 # Optional customization
 export BOT_PERSONALITY="Your custom bot personality prompt here" # Optional: Set a custom personality for your bot
@@ -68,6 +80,10 @@ $env:OPENAI_API_KEY = "your-openai-api-key"
 
 # For Claude AI (alternative)
 $env:ANTHROPIC_API_KEY = "your-anthropic-api-key"
+
+# Document auto-import (RECOMMENDED)
+$env:DOCS_PATH = "C:\path\to\your\docs" # Auto-import documents on startup
+$env:DOCS_MAX_FILES = "500" # Optional: Limit number of files to import (default: 500)
 
 # Optional customization
 $env:BOT_PERSONALITY = "Your custom bot personality prompt here" # Optional: Set a custom personality for your bot
@@ -113,7 +129,7 @@ npm run start
 ### 4. Test
 
 Go to the installed workspace and type **help** in a DM to your new bot.
-Use the `/dalle` slash command for functionality:
+Use the slash commands for various functionality:
 
 Direct mention example (in a channel or DM):
 
@@ -121,10 +137,18 @@ Direct mention example (in a channel or DM):
 @Data help
 ```
 
-Slash command example (image generation):
+Slash command examples:
 
 ```text
+# Image generation
 /dalle An image of Lt. Commander Data and his cat
+
+# Knowledge base management
+/docs-search how do I configure SSO
+/docs-reload
+
+# That's it! Documents are automatically imported from DOCS_PATH on startup
+# No manual ingestion needed - just chat naturally and get contextual responses
 ```
 
 ### 5. Deploy to production
@@ -155,8 +179,80 @@ When using the `/dalle` slash command:
 | AI_PROVIDER         | No       | AI provider to use: "openai" (default) or "claude" |
 | OPENAI_API_KEY      | *        | Your OpenAI API key (required if AI_PROVIDER=openai) |
 | ANTHROPIC_API_KEY   | *        | Your Anthropic API key (required if AI_PROVIDER=claude) |
+| DOCS_PATH           | No       | Path to your documentation directory for auto-import |
+| DOCS_MAX_FILES      | No       | Maximum files to import (default: 500)            |
 | BOT_PERSONALITY     | No       | Custom personality prompt for your bot             |
 | THINKING_MESSAGE    | No       | Custom thinking indicator message                  |
 | REDIS_URL           | No       | Custom Redis URL (default: redis://localhost:6379) |
 
-**Note:** Either OPENAI_API_KEY or ANTHROPIC_API_KEY is required depending on your AI_PROVIDER setting.
+**Notes:**
+- Either OPENAI_API_KEY or ANTHROPIC_API_KEY is required depending on your AI_PROVIDER setting
+- **Knowledge Base Modes:**
+  - **OpenAI Mode**: Vector embeddings + semantic search (most accurate, requires OPENAI_API_KEY)
+  - **Claude Mode**: Keyword matching + Claude AI ranking (no embeddings, requires ANTHROPIC_API_KEY only)
+  - **Both work perfectly with local markdown files**
+
+## 📁 Automatic Document Import (Primary Feature)
+
+The bot's **main strength** is automatically importing your local markdown documentation on startup:
+
+### 🚀 Quick Start
+```bash
+# Set environment variable
+export DOCS_PATH="/path/to/your/docs"
+
+# Start the bot - documents are automatically imported!
+npm start
+
+# Reload documents if you update them
+/docs-reload
+```
+
+### ✨ Why Automatic Import Is Better
+- **Zero Manual Work** - Set DOCS_PATH once, documents always stay current
+- **Instant Processing** - No rate limiting, process hundreds of files in minutes
+- **Perfect Content** - Clean markdown without HTML parsing issues  
+- **Complete Control** - Use your exact documentation version
+- **Works Offline** - No network dependencies
+- **Better Structure** - Preserves headings, code blocks, frontmatter
+- **Supports Both AI Modes** - OpenAI embeddings OR Claude text analysis
+- **Always Current** - Use `/docs-reload` to refresh when docs change
+
+### 📂 Supported File Types
+- `.md` (Markdown) 
+- `.markdown` (Markdown)
+- `.txt` (Plain text)
+
+### 🔄 Document Management
+- **DOCS_PATH** - Set this environment variable to your documentation directory
+- **DOCS_MAX_FILES** - Optionally limit the number of files imported (default: 500)
+- **Auto-import** - Documents loaded automatically on bot startup
+- **Manual refresh** - Use `/docs-reload` command to refresh when docs change
+
+### Automatic Context Enhancement
+When you ask questions in regular chat, the bot automatically:
+1. Searches the knowledge base for relevant information
+2. Includes context in the AI response
+3. Provides source citations
+
+**Examples:**
+
+*With OpenAI (embeddings):*
+```
+User: "How do I set up SSO?"
+Bot: "To configure SAML authentication, navigate to Settings > Identity Providers...
+
+📚 Sources:
+1. Authentication Guide (similarity: 94%)
+2. SAML Configuration Tutorial (similarity: 87%)
+```
+
+*With Claude (text analysis):*
+```
+User: "How do I configure database access?"
+Bot: "To configure database access, you'll need to create a gateway...
+
+📚 Sources:
+1. Database Connection Guide (relevance: 8)
+2. Gateway Configuration (relevance: 6)
+```
